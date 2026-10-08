@@ -1,0 +1,1730 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>温江餐饮热门店铺数据大屏</title>
+<script src="./lib/echarts.min.js"></script>
+<style>
+  :root{
+    --bg-0:#eef2f7;
+    --bg-1:#ffffff;
+    --cyan:#2f6bff;
+    --cyan-dim:rgba(47,107,255,.42);
+    --blue:#2563eb;
+    --gold:#d97706;
+    --green:#059669;
+    --pink:#db2777;
+    --txt:#1e293b;
+    --txt-dim:#7fa6c9;
+    --panel-bg:linear-gradient(180deg,rgba(255,255,255,.62) 0%,rgba(255,255,255,.30) 100%);
+    --panel-line:rgba(47,107,255,.28);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{width:100%;height:100%;overflow:hidden;background:var(--bg-0);}
+  body{
+    font-family:"Microsoft YaHei","PingFang SC","Hiragino Sans GB","Source Han Sans SC",sans-serif;
+    color:var(--txt);
+    -webkit-font-smoothing:antialiased;
+  }
+
+  /* ---------- 缩放舞台 ---------- */
+  #viewport{position:fixed;inset:0;overflow:hidden;    background:
+      radial-gradient(1200px 620px at 50% -12%,rgba(47,107,255,.10),transparent 62%),
+      radial-gradient(900px 520px at 4% 105%,rgba(56,189,248,.08),transparent 60%),
+      radial-gradient(900px 520px at 98% 105%,rgba(124,58,237,.07),transparent 60%),
+      linear-gradient(180deg,#f8fafc 0%,#eef2f7 58%,#e5ebf3 100%);
+  }
+  #viewport::before{
+    content:"";position:absolute;inset:0;pointer-events:none;opacity:.5;
+    background-image:linear-gradient(rgba(15,23,42,.045) 1px,transparent 1px),
+                     linear-gradient(90deg,rgba(47,107,255,.055) 1px,transparent 1px);
+    background-size:52px 52px;
+    mask-image:radial-gradient(circle at 50% 42%,#000 0%,transparent 82%);
+  }
+  #stage{
+    position:absolute;top:0;left:0;width:1920px;height:1080px;
+    transform-origin:0 0;
+    display:flex;flex-direction:column;
+  }
+  svg.scanline{display:none;position:absolute;inset:0;width:100%;height:100%;pointer-events:none;opacity:.32;}
+
+  /* ---------- 页头 ---------- */
+  header{
+    position:relative;height:90px;flex:0 0 90px;display:flex;align-items:center;justify-content:center;
+  }
+  header::after{
+    content:"";position:absolute;left:50%;bottom:0;transform:translateX(-50%);
+    width:1560px;height:1px;
+    background:linear-gradient(90deg,transparent,rgba(47,107,255,.75),transparent);
+  }
+  .h-deco{display:none;position:absolute;bottom:0;height:16px;width:330px;border-bottom:2px solid rgba(47,107,255,.55);}
+  .h-deco.l{left:0;border-left:2px solid rgba(47,107,255,.55);}
+  .h-deco.r{right:0;border-right:2px solid rgba(47,107,255,.55);}
+  h1{
+    font-size:40px;letter-spacing:6px;font-weight:800;
+    background:linear-gradient(180deg,#0f172a 8%,#1d4ed8 58%,#2f6bff 100%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+    
+    padding-left:6px;
+  }
+  h1 .sub{
+    display:block;font-size:13px;letter-spacing:5px;font-weight:400;margin-top:6px;
+    color:rgba(100,116,139,.85);-webkit-text-fill-color:rgba(100,116,139,.85);
+  }
+  .h-side{position:absolute;top:26px;display:flex;align-items:center;gap:10px;font-size:15px;color:var(--txt-dim);}
+  .h-side.left{left:26px;}
+  .h-side.right{right:26px;}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:var(--green);animation:blink 1.6s infinite;}
+  @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+  #clock{font-family:Consolas,"Courier New",monospace;font-size:26px;color:#0369a1;letter-spacing:2px;}
+  #today{font-size:13px;color:var(--txt-dim);letter-spacing:1px;margin-top:2px;}
+  .clock-box{display:flex;flex-direction:column;align-items:flex-end;}
+
+  /* ---------- 通用面板 ---------- */
+  .panel{
+    position:relative;background:var(--panel-bg);
+    border:1px solid var(--panel-line);
+    border-radius:6px;
+    
+    box-shadow:0 1px 3px rgba(15,23,42,.06);
+    overflow:hidden;
+  }
+  .panel::before{
+    content:"";position:absolute;top:0;left:0;width:54px;height:2px;background:var(--cyan);
+    
+  }
+  .panel::after{
+    content:"";position:absolute;bottom:0;right:0;width:54px;height:2px;background:var(--cyan);
+    
+  }
+  .p-head{
+    height:36px;flex:0 0 36px;display:flex;align-items:center;gap:9px;padding:0 12px;
+    background:linear-gradient(90deg,rgba(47,107,255,.16),rgba(47,107,255,0) 72%);
+    border-bottom:1px solid rgba(47,107,255,.16);
+  }
+  .p-head .bar{width:4px;height:15px;border-radius:1px;background:linear-gradient(180deg,var(--cyan),rgba(47,107,255,.15));}
+  .p-head .t{font-size:16px;font-weight:700;letter-spacing:1.5px;color:#0f172a;}
+  .p-head .t em{font-style:normal;font-size:11px;color:var(--txt-dim);letter-spacing:.5px;margin-left:7px;font-weight:400;}
+  .p-head .tag{
+    margin-left:auto;font-size:11px;color:var(--cyan);letter-spacing:1px;
+    border:1px solid rgba(47,107,255,.35);border-radius:3px;padding:1px 7px;
+    background:rgba(47,107,255,.07);
+  }
+  .chart{width:100%;flex:1 1 auto;min-height:0;}
+  .mask{
+    position:absolute;inset:0;background:rgba(255,255,255,.86);z-index:70;
+    display:flex;align-items:center;justify-content:center;
+    font-size:14px;color:var(--txt-dim);letter-spacing:2px;
+  }
+  .mask.hide{display:none;}
+
+  /* ---------- KPI ---------- */
+  #kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;flex:0 0 104px;height:104px;margin-top:12px;}
+  .kpi{
+    position:relative;display:flex;align-items:center;gap:12px;padding:0 16px;
+    background:linear-gradient(100deg,rgba(255,255,255,.75),rgba(255,255,255,.35));
+    border:1px solid rgba(47,107,255,.22);border-radius:5px;overflow:hidden;
+    }
+  .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--cyan));}
+  .kpi .ico{
+    width:46px;height:46px;flex:0 0 46px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    font-size:20px;
+    background:radial-gradient(circle at 50% 40%,rgba(47,107,255,.26),rgba(47,107,255,.04) 70%);
+    border:1px solid rgba(47,107,255,.3);
+  }
+  .kpi .txt{display:flex;flex-direction:column;gap:3px;min-width:0;}
+  .kpi .lab{font-size:13px;color:var(--txt-dim);letter-spacing:1px;}
+  .kpi .val{font-size:30px;font-weight:800;line-height:1;font-family:Consolas,"Courier New",monospace;
+    color:#0f172a;white-space:nowrap;}
+  .kpi .val u{font-size:13px;font-weight:400;text-decoration:none;color:var(--txt-dim);margin-left:4px;}
+
+  /* ---------- 屏幕轮播（3 屏） ---------- */
+  #screens{position:relative;flex:1 1 auto;min-height:0;margin-top:12px;}
+  .screen{
+    position:absolute;inset:0;display:none;
+    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-rows:1.24fr 1fr;
+    gap:14px;
+  }
+  .screen.active{display:grid;animation:fadeIn .45s ease both;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .screen .panel{display:flex;flex-direction:column;min-height:0;min-width:0;overflow:hidden;}
+  .span2{grid-column:span 2;}
+
+  /* ---------- 页脚滚动情报 ---------- */
+  footer{flex:0 0 44px;height:44px;margin-top:12px;display:flex;align-items:center;gap:14px;
+    border:1px solid rgba(47,107,255,.2);border-radius:5px;
+    background:linear-gradient(90deg,rgba(255,255,255,.7),rgba(255,255,255,.35));
+    padding:0 16px;overflow:hidden;}
+  footer .f-lab{flex:0 0 auto;display:flex;align-items:center;gap:8px;font-size:13px;letter-spacing:2px;color:var(--cyan);}
+  footer .f-lab .bar{width:3px;height:15px;background:var(--cyan);border-radius:1px;}
+  .ticker-wrap{flex:1;overflow:hidden;position:relative;height:100%;}
+  .ticker{position:absolute;white-space:nowrap;display:flex;gap:64px;align-items:center;height:100%;
+    font-size:15px;color:#475569;animation:roll 62s linear infinite;}
+  .ticker b{color:var(--gold);font-weight:700;}
+  .ticker i{font-style:normal;color:var(--cyan);}
+  @keyframes roll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .ticker-wrap:hover .ticker{animation-play-state:paused;}
+  footer .f-r{flex:0 0 auto;font-size:12px;color:var(--txt-dim);letter-spacing:1px;
+    background:linear-gradient(90deg,rgba(255,255,255,0),rgba(255,255,255,.92) 26%,rgba(255,255,255,.92));padding-left:34px;}
+
+  /* ---------- 头部右侧工具 ---------- */
+  .h-tools{display:flex;align-items:center;gap:8px;margin-top:8px;justify-content:flex-end;}
+  .gear{
+    font-style:normal;font-size:11.5px;letter-spacing:.5px;color:var(--txt-dim);cursor:pointer;
+    border:1px solid rgba(47,107,255,.35);border-radius:4px;padding:2px 9px;
+    background:rgba(47,107,255,.07);transition:all .15s;white-space:nowrap;
+  }
+  .gear:hover{color:#ffffff;background:var(--cyan);border-color:var(--cyan);}
+  .dots{display:flex;align-items:center;gap:6px;margin-left:6px;}
+  .dots i{
+    width:8px;height:8px;border-radius:50%;background:rgba(47,107,255,.3);cursor:pointer;
+    transition:all .2s;display:block;
+  }
+  .dots i.on{background:var(--cyan);width:20px;border-radius:4px;}
+
+  /* ---------- 正文里的下钻按钮 ---------- */
+  .mini{
+    font-style:normal;font-size:11px;color:var(--cyan);cursor:pointer;border:1px solid rgba(47,107,255,.35);
+    border-radius:3px;padding:0 6px;background:rgba(47,107,255,.07);margin-left:6px;font-weight:400;
+  }
+  .mini:hover{color:#ffffff;background:var(--cyan);}
+
+  /* ---------- 商圈聚合表 ---------- */
+  .dtab{display:flex;flex-direction:column;flex:0 1 auto;min-height:0;max-height:168px;overflow-y:auto;
+    border-top:1px dashed rgba(47,107,255,.14);margin-top:2px;}
+  .drow,.dhead{display:grid;grid-template-columns:minmax(0,1fr) 54px 70px 70px;align-items:center;height:27px;font-size:12.5px;}
+  .dhead{height:24px;color:var(--txt-dim);font-size:11.5px;letter-spacing:.5px;}
+  .drow{border-top:1px dashed rgba(47,107,255,.08);}
+  .drow span,.dhead span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:6px;}
+  .drow .n{font-family:Consolas,monospace;text-align:center;padding-left:0;color:#334155;font-weight:700;}
+  .drow .s{font-family:Consolas,monospace;text-align:center;padding-left:0;color:var(--gold);}
+  .drow .p{font-family:Consolas,monospace;text-align:center;padding-left:0;color:#64748b;}
+
+  /* ---------- 多店对比工具 ---------- */
+  .cmp-tools{display:flex;align-items:center;gap:8px;padding:2px 2px 8px;flex-wrap:wrap;flex:0 0 auto;}
+  .cmp{display:flex;flex-wrap:wrap;gap:4px 10px;max-height:70px;overflow:hidden;flex:0 0 auto;}
+  .cmp label{display:flex;align-items:center;gap:4px;font-size:11.5px;color:#475569;cursor:pointer;white-space:nowrap;}
+  .cmp input{accent-color:#2f6bff;cursor:pointer;width:12px;height:12px;}
+  .cmp label.on{color:#fff;font-weight:700;}
+  .cmp-table{flex:1 1 auto;min-height:0;overflow:hidden;border-top:1px dashed rgba(47,107,255,.14);}
+  .cmp-table .c-row{display:grid;align-items:center;height:30px;font-size:12px;
+    grid-template-columns:104px repeat(var(--n,3),minmax(0,1fr));}
+  .cmp-table .c-row.c-head{height:38px;font-size:11.5px;color:var(--txt-dim);border-bottom:1px solid rgba(47,107,255,.16);}
+  .cmp-table .c-row:not(.c-head){border-top:1px dashed rgba(47,107,255,.08);}
+  .cmp-table .c-k{padding-left:6px;color:var(--txt-dim);}
+  .cmp-table .c-v{text-align:center;font-family:Consolas,monospace;padding:0 3px;overflow:hidden;text-overflow:ellipsis;}
+  .cmp-table .c-row.c-head .c-v{font-family:inherit;color:#475569;font-size:11px;line-height:1.15;white-space:normal;}
+  .cmp-table .win{color:var(--gold);font-weight:700;}
+  .cmp-table .lose{color:#f87171;}
+  .cmp-table .c-note{font-size:11px;color:var(--txt-dim);padding:6px 6px 0;line-height:1.5;}
+
+  /* ---------- 单店下钻面板 ---------- */
+  #door{
+    position:absolute;top:0;right:0;bottom:0;width:470px;z-index:80;
+    background:linear-gradient(180deg,rgba(255,255,255,.985),rgba(255,255,255,.985));
+    border-left:1px solid rgba(47,107,255,.35);
+    box-shadow:-24px 0 60px rgba(0,0,0,.55);
+    transform:translateX(102%);transition:transform .28s cubic-bezier(.22,.7,.3,1);
+    display:flex;flex-direction:column;padding:16px 18px 18px;
+  }
+  #door.on{transform:none;}
+  #door h2{font-size:17px;font-weight:700;color:#0f172a;letter-spacing:1px;display:flex;align-items:center;gap:9px;}
+  #door h2 .bar{width:4px;height:17px;background:var(--cyan);border-radius:1px;}
+  #door .d-close{margin-left:auto;font-size:12px;color:var(--txt-dim);cursor:pointer;
+    border:1px solid rgba(47,107,255,.3);border-radius:3px;padding:2px 8px;}
+  #door .d-close:hover{color:#ffffff;background:var(--cyan);}
+  #door .d-tags{display:flex;gap:7px;flex-wrap:wrap;margin:11px 0 13px;}
+  #door .d-tags b{font-size:11.5px;font-weight:600;color:var(--cyan);border:1px solid rgba(47,107,255,.32);
+    border-radius:3px;padding:1px 8px;background:rgba(47,107,255,.08);}
+  #door .d-m{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;flex:0 0 auto;}
+  #door .d-m div{background:rgba(47,107,255,.07);border:1px solid rgba(47,107,255,.16);border-radius:5px;
+    padding:8px 4px;text-align:center;}
+  #door .d-m b{display:block;font-family:Consolas,monospace;font-size:21px;color:#fff;font-weight:700;line-height:1.15;}
+  #door .d-m i{font-style:normal;font-size:11px;color:var(--txt-dim);}
+  #door .d-rank{font-size:12.5px;color:#475569;margin:13px 0 8px;letter-spacing:.5px;}
+  #door .d-rank b{color:var(--gold);font-family:Consolas,monospace;font-size:15px;}
+  #door .d-bars{flex:1 1 auto;min-height:0;overflow:hidden;}
+  #door .d-bar{margin-bottom:11px;}
+  #door .d-lab{font-size:12px;color:var(--txt-dim);display:flex;justify-content:space-between;margin-bottom:4px;}
+  #door .d-lab b{color:#1e293b;font-family:Consolas,monospace;}
+  #door .d-track{height:9px;border-radius:5px;background:rgba(255,255,255,.09);overflow:hidden;}
+  #door .d-fill{height:100%;border-radius:5px;background:linear-gradient(90deg,rgba(47,107,255,.5),var(--cyan));}
+  #door .d-avg{height:2px;background:rgba(217,119,6,.85);margin-top:3px;border-radius:1px;}
+  #door .d-tip{font-size:11px;color:var(--txt-dim);margin-top:6px;line-height:1.6;}
+
+  /* ---------- 排名表 ---------- */
+  .rank-panel .p-head{flex:0 0 42px;height:42px;}
+  .rank-head,.rank-row{display:grid;grid-template-columns:44px minmax(0,1fr) 46px 62px 74px;align-items:center;}
+  .rank-head{flex:0 0 32px;height:32px;font-size:12.5px;color:var(--txt-dim);letter-spacing:1px;padding-right:10px;
+    border-bottom:1px solid rgba(47,107,255,.18);background:rgba(47,107,255,.05);}
+  .rank-head span{padding-left:8px;white-space:nowrap;overflow:hidden;}
+  .rank-clip{flex:1 1 auto;min-height:0;overflow:hidden;position:relative;clip-path:inset(0 0 0 0);}
+  .rank-body{min-height:0;overflow:hidden;position:relative;will-change:transform;}
+  .rank-row{height:31px;font-size:13.5px;padding-right:10px;border-bottom:1px dashed rgba(47,107,255,.09);}
+  .rank-row span{padding-left:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .rank-row:hover{background:rgba(47,107,255,.09);}
+  .rank-row .no{font-family:Consolas,monospace;font-weight:700;color:#94a3b8;}
+  .rank-row .nm{color:#334155;padding-left:2px;}
+  .rank-row .sc{font-family:Consolas,monospace;color:var(--gold);font-weight:700;padding-left:0;text-align:center;}
+  .rank-row .cm,.rank-row .pp{font-family:Consolas,monospace;color:#64748b;padding-left:0;text-align:center;font-size:12.5px;}
+  .rank-row.top1 .no{color:#fcd34d;} .rank-row.top2 .no{color:#475569;} .rank-row.top3 .no{color:#fb923c;}
+  .rank-row.top1,.rank-row.top2,.rank-row.top3{background:linear-gradient(90deg,rgba(217,119,6,.10),transparent 70%);}
+  .rank-row{cursor:pointer;}
+
+  /* ---------- 数据说明 ---------- */
+  .notice{padding:8px 14px 6px;overflow:hidden;flex:1 1 auto;min-height:0;}
+  .notice li{list-style:none;font-size:12px;line-height:1.62;color:#475569;padding-left:13px;
+    position:relative;margin-bottom:6px;}
+  .notice li::before{content:"●";position:absolute;left:0;top:0;font-size:8px;color:var(--cyan);}
+  .notice li.warn::before{color:var(--gold);}
+  .notice li b{color:#0f172a;}
+  .notice li i{font-style:normal;color:var(--gold);font-family:Consolas,monospace;}
+
+  /* ---------- 预警播报 ---------- */
+  .alert{padding:8px 14px 10px;overflow:hidden;flex:1 1 auto;min-height:0;
+    display:flex;flex-direction:column;gap:6px;justify-content:center;}
+  .alert .a-row{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#475569;
+    border-left:3px solid var(--c,var(--cyan));padding:5px 10px;border-radius:0 4px 4px 0;
+    background:rgba(47,107,255,.06);}
+  .alert .a-row .lv{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:1px;
+    color:var(--c,var(--cyan));border:1px solid var(--c,var(--cyan));border-radius:3px;padding:0 5px;}
+  .alert .a-row b{color:#0f172a;}
+  .alert .a-row i{font-style:normal;color:var(--gold);font-family:Consolas,monospace;}
+  .alert .a-row .r{margin-left:auto;color:var(--txt-dim);font-size:11.5px;white-space:nowrap;}
+
+  /* ---------- 展开态 ---------- */
+  #overlay{position:fixed;inset:0;background:rgba(255,255,255,.95);z-index:90;display:none;
+    flex-direction:column;padding:26px 40px 40px;}
+  #overlay.on{display:flex;}
+  #overlay h2{font-size:22px;font-weight:700;letter-spacing:2px;color:#0f172a;margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+  #overlay h2 .bar{width:4px;height:20px;background:var(--cyan);border-radius:1px;}
+  #overlay .ov-chart{flex:1 1 auto;min-height:0;width:100%;}
+  #overlay .hint{position:absolute;right:40px;top:30px;font-size:12px;color:var(--txt-dim);letter-spacing:1px;}
+
+  /* ---------- 导入数据弹层 ---------- */
+  #imp{position:fixed;inset:0;background:rgba(255,255,255,.93);z-index:120;display:none;
+    align-items:center;justify-content:center;}
+  #imp.on{display:flex;}
+  #imp .box{width:760px;max-height:78vh;display:flex;flex-direction:column;
+    background:linear-gradient(180deg,rgba(255,255,255,.99),rgba(255,255,255,.99));
+    border:1px solid rgba(47,107,255,.35);border-radius:8px;padding:20px 22px 18px;}
+  #imp h2{font-size:17px;color:#0f172a;font-weight:700;letter-spacing:1px;margin-bottom:8px;
+    display:flex;align-items:center;gap:9px;}
+  #imp h2 .bar{width:4px;height:17px;background:var(--cyan);border-radius:1px;}
+  #imp p{font-size:12.5px;color:var(--txt-dim);line-height:1.7;margin-bottom:10px;}
+  #imp code{color:var(--gold);font-family:Consolas,monospace;font-size:12px;}
+  #imp textarea{flex:1 1 auto;min-height:220px;resize:none;background:rgba(255,255,255,.75);
+    border:1px solid rgba(47,107,255,.22);border-radius:5px;color:#1e293b;
+    font-family:Consolas,"Courier New",monospace;font-size:12.5px;line-height:1.5;padding:10px 12px;}
+  #imp textarea:focus{outline:none;border-color:rgba(47,107,255,.6);}
+  #imp .imp-foot{display:flex;align-items:center;gap:10px;margin-top:12px;}
+  #imp .imp-foot .msg{flex:1 1 auto;font-size:12.5px;color:var(--txt-dim);}
+  #imp .imp-foot .msg.bad{color:#f87171;}
+  #imp .imp-foot .msg.ok{color:#34d399;}
+</style>
+</head>
+<body>
+<div id="viewport">
+  <div id="stage">
+    <svg class="scanline" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="lg" x1="0" y1="0" x2="1" y2="0">
+          <stop offset="0" stop-color="#2f6bff" stop-opacity="0"/>
+          <stop offset=".5" stop-color="#2f6bff" stop-opacity=".5"/>
+          <stop offset="1" stop-color="#2f6bff" stop-opacity="0"/>
+        </linearGradient>
+      </defs>
+      <rect x="0" y="0" width="1920" height="1" fill="url(#lg)" opacity="0">
+        <animate attributeName="y" values="0;1080;0" dur="14s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0;.85;0" dur="14s" repeatCount="indefinite"/>
+      </rect>
+    </svg>
+
+    <!-- ================= 页头 ================= -->
+    <header>
+      <div class="h-deco l"></div>
+      <div class="h-deco r"></div>
+      <div class="h-side left">
+        <span class="live-dot"></span>
+        <span>数据源：工作簿1-补全20家.xlsx</span>
+      </div>
+      <div>
+        <h1>温江餐饮热门店铺数据大屏<span class="sub">WENJIANG CATERING · POPULARITY MONITOR · 20 家门店</span></h1>
+      </div>
+      <div class="h-side right">
+        <div class="clock-box">
+          <div id="clock">--:--:--</div>
+          <div id="today">----</div>
+        </div>
+        <div class="h-tools">
+          <div class="dots" id="dots"></div>
+          <i class="gear" id="btnAuto">⏸ 暂停轮播</i>
+          <i class="gear" id="btnFull">全屏</i>
+          <i class="gear" id="btnImport">导入数据</i>
+        </div>
+      </div>
+    </header>
+
+    <!-- ================= KPI ================= -->
+    <section id="kpis">
+      <div class="kpi" style="--accent:#2f6bff">
+        <div class="ico">🏬</div>
+        <div class="txt"><div class="lab">监测门店总数</div><div class="val">—</div></div>
+      </div>
+      <div class="kpi" style="--accent:#d97706">
+        <div class="ico">⭐</div>
+        <div class="txt"><div class="lab">平均评分</div><div class="val">—</div></div>
+      </div>
+      <div class="kpi" style="--accent:#059669">
+        <div class="ico">💬</div>
+        <div class="txt"><div class="lab">累计评论量</div><div class="val">—</div></div>
+      </div>
+      <div class="kpi" style="--accent:#2563eb">
+        <div class="ico">💰</div>
+        <div class="txt"><div class="lab">人均消费均值</div><div class="val">—</div></div>
+      </div>
+      <div class="kpi" style="--accent:#db2777">
+        <div class="ico">🔥</div>
+        <div class="txt"><div class="lab">热门指数峰值</div><div class="val">—</div></div>
+      </div>
+    </section>
+
+    <!-- ================= 主体：3 屏轮播 ================= -->
+    <section id="screens">
+
+      <!-- ===== 第 1 屏 · 总览排行 ===== -->
+      <div class="screen active" data-name="总览排行">
+        <div class="panel" data-title="热门指数 TOP 10 排行" data-tag="POPULARITY">
+          <div class="p-head"><span class="bar"></span><span class="t">热门指数 TOP 10 排行<em>按热门指数降序</em></span><span class="tag">TOP 10</span></div>
+          <div class="chart" id="c_pop"></div>
+        </div>
+        <div class="panel span2" data-title="评论量排行 · 长尾分布" data-tag="LOG SCALE">
+          <div class="p-head"><span class="bar"></span><span class="t">评论量排行 · 长尾分布<em>对数轴 · 20 家全量，头部 3 家占 40.0%</em></span><span class="tag">LOG SCALE</span></div>
+          <div class="chart" id="c_reviewsLog"></div>
+        </div>
+
+        <div class="panel" data-title="评分分布" data-tag="RATING">
+          <div class="p-head"><span class="bar"></span><span class="t">评分分布<em>门店评分占比</em></span><span class="tag">DIST</span></div>
+          <div class="chart" id="c_rating"></div>
+        </div>
+        <div class="panel" data-title="人均消费区间分布" data-tag="PRICE">
+          <div class="p-head"><span class="bar"></span><span class="t">人均消费区间分布<em>门店数量（家）</em></span><span class="tag">PRICE</span></div>
+          <div class="chart" id="c_spend"></div>
+        </div>
+        <div class="panel" data-title="评论量区间分布" data-tag="REVIEWS">
+          <div class="p-head"><span class="bar"></span><span class="t">评论量区间分布<em>门店数量（家）</em></span><span class="tag">REVIEWS</span></div>
+          <div class="chart" id="c_cmtDist"></div>
+        </div>
+      </div>
+
+      <!-- ===== 第 2 屏 · 价值分析 ===== -->
+      <div class="screen" data-name="价值分析">
+        <div class="panel span2" data-title="人均消费 × 评分 气泡图" data-tag="MATRIX">
+          <div class="p-head"><span class="bar"></span><span class="t">人均消费 × 评分 气泡图<em>气泡大小 = 评论量，颜色 = 象限</em></span><span class="tag">MATRIX</span></div>
+          <div class="chart" id="c_scatter"></div>
+        </div>
+        <div class="panel" data-title="性价比指数 TOP 10" data-tag="VALUE">
+          <div class="p-head"><span class="bar"></span><span class="t">性价比指数 TOP 10<em>评分 ÷ 人均消费 × 100</em></span><span class="tag">VALUE</span></div>
+          <div class="chart" id="c_value"></div>
+        </div>
+
+        <div class="panel" data-title="价值四象限" data-tag="QUADRANT">
+          <div class="p-head"><span class="bar"></span><span class="t">价值四象限<em>均值线分割 · 各象限门店数</em></span><span class="tag">QUADRANT</span></div>
+          <div class="chart" id="c_quad"></div>
+        </div>
+        <div class="panel span2 rank-panel" data-title="门店综合明细榜" data-tag="ALL 20">
+          <div class="p-head"><span class="bar"></span><span class="t">门店综合明细榜<em>全部 20 家 · 点击任一行查看单店画像</em></span><span class="tag">ALL 20</span></div>
+          <div class="rank-head"><span>排名</span><span>门店名称</span><span>评分</span><span>评论</span><span>人均/热门</span></div>
+          <div class="rank-clip"><div class="rank-body" id="rankBody"></div></div>
+        </div>
+      </div>
+
+      <!-- ===== 第 3 屏 · 明细对比 ===== -->
+      <div class="screen" data-name="明细对比">
+        <div class="panel" data-title="商圈聚合" data-tag="DISTRICT">
+          <div class="p-head"><span class="bar"></span><span class="t">商圈聚合<em>按店名商圈归类</em></span><span class="tag">DISTRICT</span></div>
+          <div class="chart" id="c_district"></div>
+        </div>
+        <div class="panel span2" data-title="多店对比" data-tag="COMPARE">
+          <div class="p-head"><span class="bar"></span><span class="t">多店对比<em>最多选 3 家 · 数值最优自动标金</em></span><span class="tag">COMPARE</span></div>
+          <div class="cmp-tools">
+            <i class="gear" id="cmpSample">示例对比</i><i class="gear" id="cmpClear">清空</i>
+          </div>
+          <div class="cmp" id="cmpList"></div>
+          <div class="cmp-table" id="cmpTable" style="--n:3"></div>
+        </div>
+
+        <div class="panel" data-title="数据说明" data-tag="NOTICE">
+          <div class="p-head"><span class="bar"></span><span class="t">数据说明<em>口径与一致性提醒</em></span><span class="tag">NOTICE</span></div>
+          <div class="notice" id="noticeBox"></div>
+        </div>
+        <div class="panel span2" data-title="预警播报" data-tag="ALERT">
+          <div class="p-head"><span class="bar"></span><span class="t">预警播报<em>异常门店自动播报</em></span><span class="tag">ALERT</span></div>
+          <div class="alert" id="alertBox"></div>
+        </div>
+      </div>
+
+    </section>
+    <!-- ================= 页脚情报 ================= -->
+    <footer>
+      <div class="f-lab"><span class="bar"></span>实时情报</div>
+      <div class="ticker-wrap"><div class="ticker" id="ticker"></div></div>
+      <div class="f-r">ECharts 6.1.0 · 页面刷新时间 <span id="upd">--</span></div>
+    </footer>
+  </div>
+
+  <!-- ================= 单店下钻面板 ================= -->
+  <aside id="door">
+    <h2><span class="bar"></span><span id="dName">门店</span><i class="d-close" id="dClose">关闭</i></h2>
+    <div class="d-tags" id="dTags"></div>
+    <div class="d-m" id="dMetrics"></div>
+    <div class="d-rank" id="dRank"></div>
+    <div class="d-bars" id="dBars"></div>
+  </aside>
+</div>
+
+<!-- ================= 展开层 ================= -->
+<div id="overlay">
+  <div class="hint">按 ESC 或点击任意处返回</div>
+  <h2><span class="bar"></span><span id="ovTitle">标题</span></h2>
+  <div class="ov-chart" id="ovChart"></div>
+</div>
+
+<!-- ================= 导入数据 ================= -->
+<div id="imp">
+  <div class="box">
+    <h2><span class="bar"></span>导入数据（粘贴 CSV / 从 Excel 直接复制）</h2>
+    <p>
+      从 Excel 里选中数据区域复制，或粘贴 CSV 文本。每行一家门店，顺序固定：<br/>
+      <code>店名, 评分, 评论（条）, 消费（每人）, 热门指数</code> —— 例如
+      <code>陶德砂锅（温江旭辉店）,4.9,1936,53,93.98</code><br/>
+      首行如果是表头（含「店名」「评分」等字样）会自动跳过；分隔符支持逗号、制表符、中文逗号。
+    </p>
+    <textarea id="impText" spellcheck="false"></textarea>
+    <div class="imp-foot">
+      <span class="msg" id="impMsg">等待粘贴…</span>
+      <i class="gear" id="impCancel">取消</i>
+      <i class="gear" id="impApply">应用并重绘</i>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================
+   数据 —— 来自 工作簿1-补全20家.xlsx（Sheet1，20 家门店）
+   列：店名 / 评分 / 评论（条）/ 消费（每人）/ 热门指数
+   ========================================================== */
+const HEAD = ["店名","评分","评论（条）","消费（每人）","热门指数"];
+/* 默认数据；若浏览器里通过「导入数据」写过 localStorage，则在 boot() 里替换 */
+let RAW = [
+  ["肉室堂·獨食烤肉(温江合生汇店)",4.4,279,63,96.2],
+  ["六月雪绵阳干锅（温江旭辉cmall店）",4.4,649,68,95.03],
+  ["山丛山·云南菜（温江光华新城店）",4.4,2185,83,94.97],
+  ["三之首干锅(合生汇)",4,298,58,94.73],
+  ["泰澜得泰国菜（温江新光天地店）",4.6,7464,83,94.41],
+  ["打铁匠·无限自主烤肉(温江合生汇店)",4.1,375,89,94.32],
+  ["承裕两口子原味老火锅（总店）",4.6,5563,91,94.17],
+  ["老鼎万春卤菜（五代传承创世老店）",4.2,4595,64,94.06],
+  ["龙腾御锦·鱼鲜中餐",4.1,118,92,94.03],
+  ["陶德砂锅（温江旭辉店）",4.9,1936,53,93.98],
+  ["矮板凳老火锅（温江新光天地店）",4.6,1063,84,93.98],
+  ["福联财·川味院子·湖畔中餐（温江店）",4.6,891,75,93.85],
+  ["舒肘子",4.1,3558,65,93.97],
+  ["兔公馆酱烧兔蛙火锅",4.6,3997,58,93.73],
+  ["Modo·毛豆炉子（温江旭辉店）",3.9,1130,83,93.64],
+  ["匠和风精致料理（成都合生汇店）",4.5,3130,294,93.57],
+  ["花间别院（骑士大道店）",4.2,7668,73,93.56],
+  ["河伴居川鱼·鱼鲜（田园店）",4.2,7688,73,93.56],
+  ["温江菜花小院",4.4,67,108,93.41],
+  ["六合居·明厨亮社餐厅（温江柳城大道店）",4.4,4375,73,93.38]
+];
+/* ---------- 统计 ---------- */
+const sum = a => a.reduce((x,y)=>x+y,0);
+const avg = a => sum(a)/a.length;
+/* 短名（图表轴标签 / 播报用） */
+const shortName = n => n
+  .replace(/（[^）]*）/g,'').replace(/\([^)]*\)/g,'')
+  .replace(/^(.{10}).+$/,'$1…');
+/* 中位数 */
+function median(a){
+  const s = [...a].sort((x,y)=>x-y), m = s.length>>1;
+  return s.length % 2 ? s[m] : (s[m-1]+s[m])/2;
+}
+
+/* ==========================================================
+   数据派生层：以下变量在 refreshData() 里按 RAW 重新计算
+   （这样「导入数据」后无需改代码即可刷新全部结论）
+   ========================================================== */
+let DATA, KPI, byHot, byCmt, maxCmt, maxSpend, hotRange, MED;
+let scoreBuckets = [], spendBins = [];
+let byDistrict, byValue, quadGroups, cmtBins, TOP3CMT, PRE;
+
+/* 商圈识别关键词（按店名归类） */
+const DISTRICTS = [
+  {key:"合生汇",       kw:["合生汇"]},
+  {key:"旭辉 cmall",   kw:["旭辉"]},
+  {key:"新光天地",     kw:["新光天地"]},
+  {key:"光华新城",     kw:["光华新城"]},
+  {key:"骑士大道",     kw:["骑士大道"]},
+  {key:"柳城大道",     kw:["柳城大道"]},
+  {key:"田园",         kw:["田园"]},
+  {key:"菜花小院",     kw:["菜花小院"]}
+];
+const districtOf = name => {
+  for(const d of DISTRICTS) if(d.kw.some(k=>name.includes(k))) return d.key;
+  return "其他／未标注";
+};
+
+/* 价值四象限定义 */
+const QUAD = [
+  {key:"A", name:"物超所值", hint:"人均低于均值 · 评分高于均值", color:"#059669"},
+  {key:"B", name:"高价高质", hint:"人均高于均值 · 评分高于均值", color:"#2563eb"},
+  {key:"C", name:"待提升",   hint:"人均低于均值 · 评分低于均值", color:"#d97706"},
+  {key:"D", name:"高价低质", hint:"人均高于均值 · 评分低于均值", color:"#dc2626"}
+];
+
+function refreshData(){
+  DATA = RAW.map(r => ({ name:r[0], score:r[1], comments:r[2], spend:r[3], hot:r[4] }));
+  KPI = {
+    count:     DATA.length,
+    avgScore:  avg(DATA.map(d=>d.score)),
+    comments:  sum(DATA.map(d=>d.comments)),
+    avgSpend:  avg(DATA.map(d=>d.spend)),
+    maxHot:    Math.max(...DATA.map(d=>d.hot))
+  };
+  byHot    = [...DATA].sort((a,b)=>b.hot-a.hot);
+  byCmt    = [...DATA].sort((a,b)=>b.comments-a.comments);
+  maxCmt   = Math.max(...DATA.map(d=>d.comments));
+  maxSpend = Math.max(...DATA.map(d=>d.spend));
+  hotRange = [Math.min(...DATA.map(d=>d.hot)), KPI.maxHot];
+  MED = {
+    score:    median(DATA.map(d=>d.score)),
+    spend:    median(DATA.map(d=>d.spend)),
+    comments: median(DATA.map(d=>d.comments)),
+    hot:      median(DATA.map(d=>d.hot))
+  };
+
+  DATA.forEach(d => {
+    d.district = districtOf(d.name);
+    d.value    = d.score / d.spend * 100;                     // 性价比指数
+    const cheap = d.spend <= KPI.avgSpend;
+    const good  = d.score >= KPI.avgScore;
+    d.quad = cheap ? (good ? "A" : "C") : (good ? "B" : "D"); // 价值象限
+  });
+
+  const dm = new Map();
+  DATA.forEach(d => {
+    if(!dm.has(d.district)) dm.set(d.district, []);
+    dm.get(d.district).push(d);
+  });
+  byDistrict = [...dm.entries()].map(([name, list])=>({
+    name, n: list.length,
+    avgScore: avg(list.map(d=>d.score)),
+    avgSpend: avg(list.map(d=>d.spend)),
+    comments: sum(list.map(d=>d.comments)),
+    names: list.map(d=>d.name)
+  })).sort((a,b)=>b.n-a.n || b.avgScore-a.avgScore);
+
+  byValue = [...DATA].sort((a,b)=>b.value-a.value);
+  quadGroups = QUAD.map(q => ({
+    ...q,
+    list: DATA.filter(d=>d.quad===q.key).sort((a,b)=>b.value-a.value)
+  }));
+
+  cmtBins = [
+    {lab:"≤500 条",     test:v=>v<=500},
+    {lab:"501-1500",    test:v=>v>500&&v<=1500},
+    {lab:"1501-4000",   test:v=>v>1500&&v<=4000},
+    {lab:"4000 条以上", test:v=>v>4000}
+  ].map(b => ({
+    lab:b.lab,
+    n: DATA.filter(d=>b.test(d.comments)).length,
+    names: DATA.filter(d=>b.test(d.comments)).map(d=>d.name)
+  }));
+  TOP3CMT = byCmt.slice(0,3).reduce((s,d)=>s+d.comments,0);
+
+  const low    = DATA.filter(d=>d.score < 4.0);
+  const big    = DATA.filter(d=>d.comments > 7000);
+  const pricey = DATA.filter(d=>d.spend > 200);
+  const best   = byValue[0], worst = byValue[byValue.length-1];
+  PRE = [
+    {lv:"评分", c:"#dc2626", text:`评分低于 4.0 分的门店 <b>${low.length}</b> 家`,
+     right: low.map(d=>`${shortName(d.name)} ${d.score}`).join("、") || "—"},
+    {lv:"评论", c:"#059669", text:`评论量超 7000 条的门店 <b>${big.length}</b> 家`,
+     right: big.map(d=>`${shortName(d.name)} ${d.comments.toLocaleString("en-US")}`).join("、") || "—"},
+    {lv:"价格", c:"#d97706", text:`人均消费超 200 元的门店 <b>${pricey.length}</b> 家`,
+     right: pricey.map(d=>`${shortName(d.name)} ${d.spend} 元`).join("、") || "—"},
+    {lv:"性价比", c:"#2563eb", text:`性价比最高 <b>${shortName(best.name)}</b>，指数 <i>${best.value.toFixed(2)}</i>`,
+     right: `评分 ${best.score} 分 ／ 人均 ${best.spend} 元`},
+    {lv:"性价比", c:"#dc2626", text:`性价比最低 <b>${shortName(worst.name)}</b>，指数 <i>${worst.value.toFixed(2)}</i>`,
+     right: `评分 ${worst.score} 分 ／ 人均 ${worst.spend} 元`},
+    {lv:"集中度", c:"#d97706", text:`评论量 TOP3 占据全量 <b>${(TOP3CMT/KPI.comments*100).toFixed(1)}%</b>`,
+     right: byCmt.slice(0,3).map(d=>shortName(d.name)).join("、")},
+    {lv:"热门", c:"#059669", text:`热门指数区间 <i>${hotRange[0]}~${hotRange[1]}</i>，极差 <i>${(hotRange[1]-hotRange[0]).toFixed(2)}</i>`,
+     right: `榜首 ${shortName(byHot[0].name)}`}
+  ];
+  buildBuckets();
+}
+refreshData();
+
+/* 气泡图仅标注 3 个代表性点位（最高分 / 最高消费 / 最多评论），避免密集区文字互压 */
+const LABELED = new Set([
+  [...DATA].sort((a,b)=>b.score-a.score||b.comments-a.comments)[0],
+  [...DATA].sort((a,b)=>b.spend-a.spend)[0],
+  byCmt[0]
+].map(d=>d.name));
+
+/* 评分分布 / 消费区间（在 refreshData() 里按当前数据重算） */
+function buildBuckets(){
+  scoreBuckets = [];
+  const m = new Map();
+  DATA.forEach(d => m.set(d.score, (m.get(d.score)||0)+1));
+  [...m.keys()].sort((a,b)=>a-b).forEach(k => scoreBuckets.push({score:k, n:m.get(k)}));
+
+  spendBins = [
+    {lab:"≤60元",     test:v=>v<=60},
+    {lab:"61-80元",   test:v=>v>60&&v<=80},
+    {lab:"81-100元",  test:v=>v>80&&v<=100},
+    {lab:"101-150元", test:v=>v>100&&v<=150},
+    {lab:"150元以上", test:v=>v>150}
+  ].map(b => ({lab:b.lab, n:DATA.filter(d=>b.test(d.spend)).length}));
+}
+
+/* ---------- 主题色 ---------- */
+const C = {
+  cyan:"#2f6bff", blue:"#2563eb", gold:"#d97706", green:"#059669",
+  pink:"#db2777", purple:"#7c3aed", txt:"#1e293b", dim:"#7fa6c9"
+};
+echarts.registerTheme("bigscreen", {
+  color:[C.cyan,C.gold,C.green,C.pink,C.purple,C.blue],
+  textStyle:{fontFamily:'"Microsoft YaHei","PingFang SC",sans-serif',color:C.txt},
+  backgroundColor:"transparent"
+});
+const AXIS_LINE  = {lineStyle:{color:"rgba(47,107,255,.30)"}};
+const AXIS_LABEL = {color:C.dim,fontSize:12};
+const SPLIT_LINE = {lineStyle:{color:"rgba(47,107,255,.10)",type:"dashed"}};
+const TIP = {
+  backgroundColor:"rgba(255,255,255,.94)",
+  borderColor:"rgba(47,107,255,.45)",
+  borderWidth:1,
+  padding:[9,13],
+  textStyle:{color:C.txt,fontSize:13},
+  extraCssText:"border-radius:4px;"
+};
+const hGrad = (c1,c2) => ({
+  type:"linear", x:0, y:0, x2:1, y2:0,
+  colorStops:[{offset:0,color:c1},{offset:1,color:c2}]
+});
+const vGrad = (c1,c2) => ({
+  type:"linear", x:0, y:0, x2:0, y2:1,
+  colorStops:[{offset:0,color:c1},{offset:1,color:c2}]
+});
+/* ==========================================================
+   0. KPI 数字滚动
+   ========================================================== */
+function countUp(el){
+  const target = parseFloat(el.dataset.num), dec = +(el.dataset.dec||0);
+  const unit = el.querySelector("u") ? el.querySelector("u").outerHTML : "";
+  const dur = 1200, t0 = performance.now();
+  (function tick(now){
+    const p = Math.min(1,(now-t0)/dur);
+    const e = 1-Math.pow(1-p,3);                       // easeOutCubic
+    const v = target*e;
+    el.innerHTML = (dec ? v.toFixed(dec) : Math.round(v).toLocaleString("en-US")) + unit;
+    if(p<1) requestAnimationFrame(tick);
+  })(t0);
+  /* 兜底：即使页面不刷新动画帧也保证落位 */
+  setTimeout(()=>{
+    el.innerHTML = (dec ? target.toFixed(dec) : Math.round(target).toLocaleString("en-US")) + unit;
+  }, dur + 120);
+}
+
+/* ==========================================================
+   1. 热门指数 TOP10 —— 横向条形
+   ========================================================== */
+function optPop(){
+  const list = byHot.slice(0,10).slice().reverse();
+  const mn = hotRange[0], mx = hotRange[1];
+  return {
+    grid:{left:14,right:96,top:12,bottom:8,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const i = byHot.findIndex(d=>d.name===p[0].name);
+        const d = byHot[i];
+        return `<b style="color:#1d4ed8">NO.${i+1} ${d.name}</b><br/>`+
+               `热门指数：<b style="color:#d97706">${d.hot}</b><br/>`+
+               `评分：${d.score} 分 ｜ 评论：${d.comments} 条<br/>`+
+               `人均：${d.spend} 元`;
+      }},TIP),
+    xAxis:{
+      /* 整数刻度：热门指数集中在 93~96，用小数刻度会让 96 与 96.2 挤在一起 */
+      type:"value", min:Math.floor(mn)-1, max:Math.ceil(mx)+1, interval:1,
+      axisLine:AXIS_LINE,
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,formatter:v=>v.toFixed(0)}),
+      splitLine:SPLIT_LINE
+    },
+    yAxis:{
+      type:"category",
+      data:list.map(d=>shortName(d.name)),
+      axisLine:AXIS_LINE,
+      axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{
+        fontSize:12,color:"#334155",width:150,overflow:"truncate",
+        formatter:v=>v
+      })
+    },
+    series:[{
+      type:"bar", barWidth:13,
+      showBackground:true,
+      backgroundStyle:{color:"rgba(47,107,255,.06)",borderRadius:7},
+      itemStyle:{
+        borderRadius:[0,7,7,0],
+        color:p => p.dataIndex===list.length-1
+          ? hGrad("#fbbf24",C.gold)
+          : hGrad("rgba(47,107,255,.55)",C.cyan)
+      },
+      emphasis:{itemStyle:{}},
+      label:{
+        show:true,position:"right",fontSize:13,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",color:C.gold,
+        formatter:p=>p.value.toFixed(2)
+      },
+      data:list.map(d=>d.hot),
+      animationDuration:1400, animationDelay:i=>i*70, animationEasing:"cubicOut"
+    }]
+  };
+}
+
+/* ==========================================================
+   2. 评分分布 —— 环形
+   ========================================================== */
+function optRating(){
+  const colors = ["#94a3b8","#2563eb","#059669","#2f6bff","#d97706","#fb923c"];
+  const data = scoreBuckets.map((b,i)=>({
+    name:b.score+" 分", value:b.n,
+    itemStyle:{color:colors[i%colors.length]}
+  }));
+  return {
+    tooltip:Object.assign({trigger:"item",
+      formatter:p=>`<b style="color:${p.color}">${p.name}</b><br/>门店：<b>${p.value}</b> 家（${p.percent}%）`},TIP),
+    legend:{
+      orient:"vertical", right:14, top:"center", itemWidth:10, itemHeight:10,
+      textStyle:{color:"#475569",fontSize:12},
+      formatter:n=>{
+        const b = scoreBuckets.find(x=>x.score+" 分"===n);
+        return n+"  "+b.n+"家";
+      }
+    },
+    series:[{
+      type:"pie", radius:["44%","70%"], center:["34%","52%"],
+      avoidLabelOverlap:true,
+      itemStyle:{borderColor:"#ffffff",borderWidth:2},
+      label:{show:true,color:"#334155",fontSize:11,
+        formatter:p=>p.percent>=20?`${p.percent}%`:""},
+      labelLine:{length:5,length2:7,lineStyle:{color:"rgba(47,107,255,.4)"}},
+      emphasis:{scale:true,scaleSize:8,itemStyle:{}},
+      data:data,
+      animationType:"scale",animationDuration:1200
+    }],
+    graphic:[{
+      type:"text",left:"34%",bottom:"56%",style:{
+        text:"门店\n评分",fill:"#64748b",fontSize:12,align:"center",lineHeight:16
+      }
+    },{
+      type:"text",left:"34%",bottom:"47%",style:{
+        text:DATA.length+" 家",fill:C.gold,fontSize:16,fontWeight:"bold",align:"center"
+      }
+    }]
+  };
+}
+
+/* ==========================================================
+   3. 人均消费 × 评分 气泡图
+   ========================================================== */
+function optScatter(){
+  const maxLog = Math.log(maxCmt);
+  const pts = DATA.map(d=>{
+    const t = Math.log(d.comments)/maxLog;                       // 0~1
+    const size = 22 + t*46;                                      // 22~68 px
+    const c = new echarts.graphic.LinearGradient(0,0,1,1,[
+      {offset:0,color:"rgba(47,107,255,.95)"},
+      {offset:1,color:"rgba(219,39,119,.85)"}
+    ]);
+    return {
+      name:d.name, value:[d.spend,d.score,d.comments,d.hot],
+      symbolSize:size,
+      itemStyle:{
+        color:c, opacity:.78,
+        borderColor:"rgba(148,163,184,.85)", borderWidth:1
+      }
+    };
+  });
+  return {
+    grid:{left:16,right:26,top:52,bottom:14,containLabel:true},
+    tooltip:Object.assign({trigger:"item",
+      formatter:p=>{
+        const d = p.data; const v = d.value;
+        return `<b style="color:#1d4ed8">${d.name}</b><br/>`+
+               `人均消费：<b style="color:#d97706">${v[0]} 元</b><br/>`+
+               `评分：<b style="color:#059669">${v[1]} 分</b><br/>`+
+               `评论量：${v[2].toLocaleString("en-US")} 条<br/>`+
+               `热门指数：${v[3]}`;
+      }},TIP),
+    legend:{
+      top:10,left:"center",itemWidth:12,itemHeight:12,icon:"circle",
+      textStyle:{color:"#475569",fontSize:11.5},
+      data:[{name:"气泡大小 = 评论量"},
+            {name:"高评分带（≥4.5分）",itemStyle:{color:"rgba(5,150,105,.85)"}},
+            {name:"人均消费均值 84.1 元",itemStyle:{color:"rgba(217,119,6,.85)"}}]
+    },
+    xAxis:{
+      type:"value", name:"人均消费（元）", nameLocation:"end",
+      nameTextStyle:{color:C.dim,fontSize:12,padding:[0,0,0,10]},
+      min:30, max:320,
+      axisLine:AXIS_LINE, axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11}),
+      splitLine:SPLIT_LINE
+    },
+    yAxis:{
+      type:"value", name:"评分（分）", nameLocation:"end",
+      nameTextStyle:{color:C.dim,fontSize:12,padding:[0,-34,0,0]},
+      min:3.7, max:5.0, interval:0.2,
+      axisLine:AXIS_LINE, axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,formatter:v=>v.toFixed(1)}),
+      splitLine:SPLIT_LINE
+    },
+    series:[
+      {
+        /* 气泡 */
+        type:"scatter", name:"门店",
+        data:pts,
+        emphasis:{scale:1.18,itemStyle:{opacity:1}},
+        label:{
+          show:true, position:"top", fontSize:11, color:"#1d4ed8",
+          textBorderColor:"#ffffff", textBorderWidth:2.5,
+          formatter:p=>LABELED.has(p.data.name) ? shortName(p.data.name).slice(0,8) : "",
+          distance:5
+        },
+        labelLayout:{hideOverlap:true, moveOverlap:"shiftY"},
+        markArea:{
+          silent:true,
+          itemStyle:{color:"rgba(5,150,105,.07)"},
+          data:[[{yAxis:4.5},{yAxis:5.0}]]
+        },
+        markLine:{
+          silent:true, symbol:"none",
+          lineStyle:{color:"rgba(217,119,6,.55)",type:"dashed",width:1},
+          label:{color:"#d97706",fontSize:11,formatter:"人均均值 {c} 元",position:"insideEndTop"},
+          data:[{xAxis:84.1}]
+        },
+        animationDuration:1400, animationDelay:i=>i*60
+      },
+      { /* 图例占位 */
+        type:"scatter", name:"高评分带（≥4.5分）", data:[], itemStyle:{color:"rgba(5,150,105,.85)"}
+      },
+      { /* 图例占位 */
+        type:"scatter", name:"人均消费均值 84.1 元", data:[], itemStyle:{color:"rgba(217,119,6,.85)"}
+      },
+      { /* 气泡大小图例占位 */
+        type:"scatter", name:"气泡大小 = 评论量",
+        data:[[ -100, -100 ]], symbolSize:26,
+        itemStyle:{color:"rgba(47,107,255,.6)",borderColor:"rgba(148,163,184,.8)"}
+      }
+    ]
+  };
+}
+
+/* ==========================================================
+   4. 人均消费区间分布 —— 柱状
+   ========================================================== */
+function optSpend(){
+  const mx = Math.max(...spendBins.map(b=>b.n));
+  return {
+    grid:{left:14,right:22,top:34,bottom:10,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const b = spendBins[p[0].dataIndex];
+        const list = DATA.filter(d=>{
+          const t=[v=>v<=60,v=>v>60&&v<=80,v=>v>80&&v<=100,v=>v>100&&v<=150,v=>v>150][p[0].dataIndex];
+          return t(d.spend);
+        }).map(d=>d.name).join("、");
+        return `<b style="color:#1d4ed8">${b.lab}</b><br/>门店：<b style="color:#d97706">${b.n}</b> 家<br/>`+
+               `<span style="color:#7fa6c9;font-size:12px">${list||"—"}</span>`;
+      }},TIP),
+    xAxis:{
+      type:"category", data:spendBins.map(b=>b.lab),
+      axisLine:AXIS_LINE, axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11.5})
+    },
+    yAxis:{
+      type:"value", name:"门店数（家）",
+      nameTextStyle:{color:C.dim,fontSize:11,padding:[0,0,2,16]},
+      nameGap:12,
+      minInterval:1, max:mx+1,
+      axisLine:AXIS_LINE, axisLabel:AXIS_LABEL, splitLine:SPLIT_LINE
+    },
+    series:[{
+      type:"bar", barWidth:"46%",
+      itemStyle:{
+        borderRadius:[6,6,0,0],
+        color:vGrad("rgba(47,107,255,.10)","rgba(47,107,255,.85)")
+      },
+      emphasis:{itemStyle:{color:vGrad("rgba(217,119,6,.15)",C.gold)}},
+      label:{show:true,position:"top",color:"#334155",fontSize:13,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",formatter:"{c}家"},
+      data:spendBins.map(b=>b.n),
+      animationDuration:1200, animationDelay:i=>i*90
+    }]
+  };
+}
+
+/* ==========================================================
+   5. 评论量排行 · 长尾分布 —— 对数轴横向条形（20 家全量）
+   ========================================================== */
+function optReviewsLog(){
+  const list = [...DATA].sort((a,b)=>b.comments-a.comments).reverse();   // 升序：最大的在最上
+  const top5 = new Set(byCmt.slice(0,5).map(d=>d.name));
+  const medLine = MED.comments;
+  const grad = c => hGrad("rgba(5,150,105,.38)", c);
+  return {
+    grid:{left:14,right:96,top:10,bottom:6,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const d = DATA.find(x=>x.name===p[0].name);
+        const rank = byCmt.findIndex(x=>x.name===d.name)+1;
+        return `<b style="color:#1d4ed8">NO.${rank} ${d.name}</b><br/>`+
+               `评论量：<b style="color:#059669">${d.comments.toLocaleString("en-US")}</b> 条`+
+               `<span style="color:#7fa6c9;font-size:11.5px"> · 占全量 ${(d.comments/KPI.comments*100).toFixed(2)}%</span><br/>`+
+               `评分：${d.score} 分 ｜ 人均：${d.spend} 元<br/>`+
+               `评论量中位数 ${medLine} 条 ／ 本店为 <b>${(d.comments/medLine).toFixed(2)}×</b>`;
+      }},TIP),
+    xAxis:{
+      type:"log", min:50, max:12000, logBase:10,
+      axisLine:AXIS_LINE,
+      /* 对数轴默认会画出 100/200/300… 一堆次刻度标签，只保留 100 / 1k / 10k 三个 */
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,
+        hideOverlap:true,
+        formatter:v=>[100,1000,10000].indexOf(v)>=0 ? (v>=1000?(v/1000)+"k":String(v)) : ""}),
+      axisTick:{show:false}, minorTick:{show:false},
+      splitLine:SPLIT_LINE, minorSplitLine:{show:false}
+    },
+    yAxis:{
+      type:"category", data:list.map(d=>shortName(d.name)),
+      axisLine:AXIS_LINE, axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11.5,color:"#334155",width:150,overflow:"truncate"})
+    },
+    series:[{
+      type:"bar", barWidth:9,
+      showBackground:true,
+      backgroundStyle:{color:"rgba(5,150,105,.05)",borderRadius:6},
+      itemStyle:{
+        borderRadius:[0,6,6,0],
+        color:p => {
+          const d = DATA.find(x=>x.name===list[p.dataIndex].name);
+          return d.comments >= medLine*2 ? grad(C.green) : grad("#38bdf8");
+        }
+      },
+      emphasis:{itemStyle:{}},
+      label:{
+        show:true,position:"right",fontSize:11.5,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",color:"#475569",
+        formatter:p=>top5.has(list[p.dataIndex].name) ? p.value.toLocaleString("en-US") : ""
+      },
+      markLine:{
+        silent:true, symbol:"none",
+        lineStyle:{color:"rgba(217,119,6,.65)",type:"dashed",width:1},
+        label:{color:"#d97706",fontSize:11,formatter:"中位数 {c}",position:"insideEndTop"},
+        data:[{xAxis:medLine}]
+      },
+      data:list.map(d=>d.comments),
+      animationDuration:1200, animationDelay:i=>i*45, animationEasing:"cubicOut"
+    }]
+  };
+}
+
+/* ==========================================================
+   5b. 评论量区间分布 —— 柱状
+   ========================================================== */
+function optCmtDist(){
+  const mx = Math.max(...cmtBins.map(b=>b.n));
+  return {
+    grid:{left:14,right:22,top:34,bottom:10,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const b = cmtBins[p[0].dataIndex];
+        const list = b.names.map(n=>shortName(n)).join("、");
+        return `<b style="color:#1d4ed8">${b.lab}</b><br/>门店：<b style="color:#059669">${b.n}</b> 家<br/>`+
+               `<span style="color:#7fa6c9;font-size:12px">${list||"—"}</span>`;
+      }},TIP),
+    xAxis:{
+      type:"category", data:cmtBins.map(b=>b.lab),
+      axisLine:AXIS_LINE, axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11})
+    },
+    yAxis:{
+      type:"value", name:"门店数（家）",
+      nameTextStyle:{color:C.dim,fontSize:11,padding:[0,0,2,16]},
+      nameGap:12, minInterval:1, max:mx+1,
+      axisLine:AXIS_LINE, axisLabel:AXIS_LABEL, splitLine:SPLIT_LINE
+    },
+    series:[{
+      type:"bar", barWidth:"44%",
+      itemStyle:{
+        borderRadius:[6,6,0,0],
+        color:vGrad("rgba(5,150,105,.10)","rgba(5,150,105,.85)")
+      },
+      emphasis:{itemStyle:{color:vGrad("rgba(47,107,255,.15)",C.cyan)}},
+      label:{show:true,position:"top",color:"#334155",fontSize:13,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",formatter:"{c}家"},
+      data:cmtBins.map(b=>b.n),
+      animationDuration:1200, animationDelay:i=>i*90
+    }]
+  };
+}
+
+/* ==========================================================
+   5c. 性价比指数 TOP10 —— 横向条形
+   ========================================================== */
+function optValue(){
+  const list = byValue.slice(0,10).slice().reverse();
+  const mn = list[0].value, mx = list[list.length-1].value;
+  return {
+    grid:{left:14,right:66,top:10,bottom:6,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const d = byValue.find(x=>x.name===p[0].name);
+        const rank = byValue.findIndex(x=>x.name===d.name)+1;
+        return `<b style="color:#1d4ed8">NO.${rank} ${d.name}</b><br/>`+
+               `性价比指数：<b style="color:#d97706">${d.value.toFixed(2)}</b>`+
+               `<span style="color:#7fa6c9;font-size:11.5px"> = ${d.score} ÷ ${d.spend} × 100</span><br/>`+
+               `评分 ${d.score} 分 ｜ 人均 ${d.spend} 元 ｜ 评论 ${d.comments.toLocaleString("en-US")} 条<br/>`+
+               `全量均值 <b>${(KPI.avgScore/KPI.avgSpend*100).toFixed(2)}</b>`;
+      }},TIP),
+    xAxis:{
+      /* 用 toFixed 收敛，否则 5.7-0.6 会算出 5.100000000000005 这种脏刻度 */
+      type:"value", min:+(Math.floor(mn*10)/10-0.6).toFixed(2), max:Math.ceil(mx*10)/10, splitNumber:5,
+      axisLine:AXIS_LINE,
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,formatter:v=>v.toFixed(1)}),
+      splitLine:SPLIT_LINE
+    },
+    yAxis:{
+      type:"category", data:list.map(d=>shortName(d.name)),
+      axisLine:AXIS_LINE, axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11.5,color:"#334155",width:150,overflow:"truncate"})
+    },
+    series:[{
+      type:"bar", barWidth:13,
+      showBackground:true,
+      backgroundStyle:{color:"rgba(217,119,6,.06)",borderRadius:7},
+      itemStyle:{
+        borderRadius:[0,7,7,0],
+        color:p => p.dataIndex===list.length-1
+          ? hGrad("#ffedd5",C.gold)
+          : hGrad("rgba(217,119,6,.35)","rgba(47,107,255,.85)")
+      },
+      emphasis:{itemStyle:{}},
+      label:{show:true,position:"right",fontSize:12.5,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",color:C.gold,formatter:p=>p.value.toFixed(2)},
+      data:list.map(d=>d.value),
+      animationDuration:1400, animationDelay:i=>i*70, animationEasing:"cubicOut"
+    }]
+  };
+}
+
+/* ==========================================================
+   5d. 价值四象限 —— 散点 + 均值分割线
+   ========================================================== */
+function optQuad(){
+  const colorOf = q => (QUAD.find(x=>x.key===q)||{}).color || C.cyan;
+  const pts = quadGroups.flatMap(g => g.list.map(d=>({
+    name:d.name,
+    value:[d.spend, d.score, d.comments, d.value, g.key],
+    itemStyle:{color:colorOf(g.key), opacity:.9,
+      borderColor:"rgba(148,163,184,.85)", borderWidth:1}
+  })));
+  return {
+    grid:{left:16,right:20,top:44,bottom:12,containLabel:true},
+    tooltip:Object.assign({trigger:"item",
+      formatter:p=>{
+        const v = p.data.value;
+        const g = QUAD.find(x=>x.key===v[4]);
+        return `<b style="color:#1d4ed8">${p.data.name}</b><br/>`+
+               `象限：<b style="color:${g.color}">${g.key} · ${g.name}</b>`+
+               `<span style="color:#7fa6c9;font-size:11.5px">（${g.hint}）</span><br/>`+
+               `人均消费：<b style="color:#d97706">${v[0]} 元</b> ｜ 评分：<b style="color:#059669">${v[1]} 分</b><br/>`+
+               `性价比指数：<b>${v[3].toFixed(2)}</b> ｜ 评论：${v[2].toLocaleString("en-US")} 条`;
+      }},TIP),
+    legend:{
+      top:8, left:"center", itemWidth:11, itemHeight:11, icon:"roundRect",
+      textStyle:{color:"#475569",fontSize:11},
+      data:QUAD.map(q=>({name:`${q.key} ${q.name}（${DATA.filter(d=>d.quad===q.key).length}）`,
+        itemStyle:{color:q.color}}))
+    },
+    xAxis:{
+      type:"value", name:"人均消费（元）", nameLocation:"end",
+      nameTextStyle:{color:C.dim,fontSize:11.5,padding:[0,0,0,10]},
+      min:30, max:320,
+      axisLine:AXIS_LINE, axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11}),
+      splitLine:SPLIT_LINE
+    },
+    yAxis:{
+      type:"value", name:"评分（分）", nameLocation:"end",
+      nameTextStyle:{color:C.dim,fontSize:11.5,padding:[0,-30,0,0]},
+      min:3.7, max:5.0, interval:0.2,
+      axisLine:AXIS_LINE,
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,formatter:v=>v.toFixed(1)}),
+      splitLine:SPLIT_LINE
+    },
+    series:[
+      {
+        type:"scatter",
+        symbolSize:v=>16 + Math.min(1, Math.log(v[2])/Math.log(maxCmt))*26,
+        data:pts,
+        emphasis:{scale:1.25,itemStyle:{opacity:1}},
+        label:{
+          show:true, position:"top", fontSize:10.5, color:"#475569",
+          textBorderColor:"#ffffff", textBorderWidth:2.5,
+          formatter:p=>LABELED.has(p.data.name) ? shortName(p.data.name).slice(0,7) : "",
+          distance:4
+        },
+        labelLayout:{hideOverlap:true, moveOverlap:"shiftY"},
+        markLine:{
+          silent:true, symbol:"none",
+          lineStyle:{color:"rgba(217,119,6,.60)",type:"dashed",width:1},
+          label:{color:"#d97706",fontSize:10.5},
+          data:[
+            {xAxis:KPI.avgSpend, label:{formatter:"人均均值 "+KPI.avgSpend.toFixed(1), position:"insideEndTop"}},
+            {yAxis:KPI.avgScore, label:{formatter:"评分均值 "+KPI.avgScore.toFixed(2), position:"insideStartTop"}}
+          ]
+        },
+        animationDuration:1200, animationDelay:i=>i*45
+      },
+      ...QUAD.map(q=>({type:"scatter", name:`${q.key} ${q.name}（${DATA.filter(d=>d.quad===q.key).length}）`,
+        data:[], itemStyle:{color:q.color}}))
+    ]
+  };
+}
+
+/* ==========================================================
+   5e. 商圈聚合 —— 横向条形
+   ========================================================== */
+function optDistrict(){
+  const list = [...byDistrict].reverse();
+  const mx = Math.max(...list.map(d=>d.n));
+  return {
+    grid:{left:14,right:34,top:12,bottom:6,containLabel:true},
+    tooltip:Object.assign({trigger:"axis",axisPointer:{type:"shadow",shadowStyle:{color:"rgba(47,107,255,.08)"}},
+      formatter:p=>{
+        const d = byDistrict.find(x=>x.name===p[0].name);
+        return `<b style="color:#1d4ed8">${d.name}商圈</b><br/>`+
+               `门店：<b style="color:#d97706">${d.n}</b> 家 ｜ 平均评分 <b style="color:#059669">${d.avgScore.toFixed(2)}</b><br/>`+
+               `平均人均：<b>${d.avgSpend.toFixed(0)}</b> 元 ｜ 评论合计 ${d.comments.toLocaleString("en-US")} 条<br/>`+
+               `<span style="color:#7fa6c9;font-size:11.5px">${d.names.map(n=>shortName(n)).join("、")}</span>`;
+      }},TIP),
+    xAxis:{
+      type:"value", minInterval:1, max:mx+0.6,
+      axisLine:AXIS_LINE,
+      /* 只标整数刻度，避免出现 6.6 这种由 max 撑出来的脏标签 */
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11,formatter:v=>Number.isInteger(v) ? v : ""}),
+      splitLine:SPLIT_LINE
+    },
+    yAxis:{
+      type:"category", data:list.map(d=>d.name),
+      axisLine:AXIS_LINE, axisTick:{show:false},
+      axisLabel:Object.assign({},AXIS_LABEL,{fontSize:11.5,color:"#334155",width:96,overflow:"truncate"})
+    },
+    series:[{
+      type:"bar", barWidth:12,
+      showBackground:true,
+      backgroundStyle:{color:"rgba(47,107,255,.06)",borderRadius:6},
+      itemStyle:{
+        borderRadius:[0,6,6,0],
+        color:p => p.dataIndex===list.length-1
+          ? hGrad("#ffedd5",C.gold)
+          : hGrad("rgba(47,107,255,.35)",C.cyan)
+      },
+      emphasis:{itemStyle:{}},
+      label:{show:true,position:"right",fontSize:12.5,fontWeight:"bold",
+        fontFamily:"Consolas,monospace",color:C.cyan,formatter:"{c}家"},
+      data:list.map(d=>d.n),
+      animationDuration:1200, animationDelay:i=>i*60
+    }]
+  };
+}
+
+/* ==========================================================
+   6. 明细榜（可点击下钻）
+   ========================================================== */
+function buildRank(){
+  const body = document.getElementById("rankBody");
+  const rows = DATA.map((d,i)=>({ rank: byHot.findIndex(x=>x.name===d.name)+1, idx:i, d }))
+                   .sort((a,b)=>a.rank-b.rank);
+  const html = () => rows.map(r=>
+    `<div class="rank-row ${r.rank<=3?"top"+(r.rank):""}" data-name="${r.d.name}" title="点击查看单店画像">`+
+      `<span class="no">${String(r.rank).padStart(2,"0")}</span>`+
+      `<span class="nm">${r.d.name}</span>`+
+      `<span class="sc">${r.d.score.toFixed(1)}</span>`+
+      `<span class="cm">${r.d.comments.toLocaleString("en-US")}</span>`+
+      `<span class="pp">${r.d.spend}｜${r.d.hot}</span>`+
+    `</div>`).join("");
+  body.innerHTML = html() + html();          // 无缝滚动用双份
+  body.querySelectorAll(".rank-row").forEach(el=>{
+    el.addEventListener("click", ()=> openDoor(el.dataset.name));
+  });
+  let y = 0; const H = rows.length*31;
+  setInterval(()=>{
+    if(document.getElementById("overlay").classList.contains("on")) return;
+    if(document.getElementById("door").classList.contains("on")) return;
+    y -= 0.38;
+    if(Math.abs(y) >= H) y = 0;
+    body.style.transform = `translateY(${y}px)`;
+  }, 30);
+}
+
+/* ==========================================================
+   6b. 商圈聚合表
+   ========================================================== */
+function buildDistrictTable(){
+  const box = document.getElementById("distTable");
+  if(!box) return;                     // 商圈明细已由图表承载，表格可选
+  box.innerHTML = byDistrict.map(d=>
+    `<div class="drow">
+       <span class="nm2" title="${d.names.join("、")}">${d.name}</span>
+       <span class="n">${d.n}</span>
+       <span class="s">${d.avgScore.toFixed(2)}</span>
+       <span class="p">${d.avgSpend.toFixed(0)}元</span>
+     </div>`).join("");
+}
+
+/* ==========================================================
+   6c. 数据说明
+   ========================================================== */
+function buildNotice(){
+  const pct = (a,b) => (a/b*100).toFixed(1) + "%";
+  const items = [
+    {w:false, html:`数据源 <b>工作簿1-补全20家.xlsx</b> · 单表 20 家门店 · 字段：店名／评分／评论量／人均消费／热门指数`},
+    {w:false, html:`评论量中位数 <i>${MED.comments}</i> 条、人均中位数 <i>${MED.spend}</i> 元、评分中位数 <i>${MED.score}</i> 分`},
+    {w:false, html:`性价比指数 = 评分 ÷ 人均消费 × 100，全量均值 <i>${(KPI.avgScore/KPI.avgSpend*100).toFixed(2)}</i>`},
+    {w:true,  html:`<b>花间别院（骑士大道店）</b> 与 <b>河伴居川鱼·鱼鲜（田园店）</b> 的人均（均 73 元）、热门指数（均 93.56）完全相同，评论量仅差 20 条，疑似同源记录或同品牌门店，分析时建议合并核对`},
+    {w:true,  html:`<b>热门指数区分度偏低</b>：20 家全部落在 <i>${hotRange[0]}~${hotRange[1]}</i>，极差仅 <i>${(hotRange[1]-hotRange[0]).toFixed(2)}</i>，故价值四象限采用「评分 × 人均消费」，未采用热门指数`},
+    {w:false, html:`评论量呈长尾：最高 <i>${maxCmt.toLocaleString("en-US")}</i> 条（河伴居）／最低 <i>67</i> 条（温江菜花小院），相差 <i>${(maxCmt/67).toFixed(0)}</i> 倍；TOP3 合计占 <i>${pct(TOP3CMT,KPI.comments)}</i>`}
+  ];
+  document.getElementById("noticeBox").innerHTML =
+    `<ul>${items.map(o=>`<li class="${o.w?"warn":""}">${o.html}</li>`).join("")}</ul>`;
+}
+
+/* ==========================================================
+   6d. 预警播报
+   ========================================================== */
+function buildAlert(){
+  document.getElementById("alertBox").innerHTML = PRE.map(a=>
+    `<div class="a-row" style="--c:${a.c}">
+       <span class="lv">${a.lv}</span>
+       <span>${a.text}</span>
+       <span class="r">${a.right}</span>
+     </div>`).join("");
+}
+
+/* ==========================================================
+   6e. 多店对比
+   ========================================================== */
+let cmpSel = [];
+function buildCmpList(){
+  const box = document.getElementById("cmpList");
+  box.innerHTML = DATA.map(d=>
+    `<label data-name="${d.name}"><input type="checkbox" value="${d.name}"
+      ${cmpSel.includes(d.name)?"checked":""} />${shortName(d.name)}</label>`).join("");
+  box.querySelectorAll("input").forEach(inp=>{
+    inp.addEventListener("change", ()=>{
+      const n = inp.value;
+      if(inp.checked){
+        if(cmpSel.length >= 3){ inp.checked = false; return; }
+        cmpSel.push(n);
+      } else {
+        cmpSel = cmpSel.filter(x=>x!==n);
+      }
+      renderCmp();
+    });
+  });
+}
+function renderCmp(){
+  document.querySelectorAll("#cmpList label").forEach(l=>{
+    l.classList.toggle("on", cmpSel.includes(l.dataset.name));
+  });
+  const box = document.getElementById("cmpTable");
+  if(cmpSel.length === 0){
+    box.style.setProperty("--n", 3);
+    box.innerHTML = `<div class="c-note">勾选 2–3 家门店开始对比，或点上面的「示例对比」。</div>`;
+    return;
+  }
+  const list = cmpSel.map(n=>DATA.find(d=>d.name===n)).filter(Boolean);
+  const n = list.length;
+  box.style.setProperty("--n", n);
+
+  const maxOf = k => Math.max(...list.map(d=>k(d)));
+  const minOf = k => Math.min(...list.map(d=>k(d)));
+  const row = (lab, k, fmt, mode) => {
+    const mx = maxOf(k), mn = minOf(k);
+    const vals = list.map(d=>{
+      const v = k(d);
+      const cls = (mode==="max" && n>1 && v===mx) || (mode==="min" && n>1 && v===mn) ? "win"
+                : (mode==="max" && n>1 && v===mn ? "lose" : "");
+      return `<span class="c-v ${cls}">${fmt(v,d)}</span>`;
+    }).join("");
+    return `<div class="c-row"><span class="c-k">${lab}</span>${vals}</div>`;
+  };
+
+  box.innerHTML =
+    `<div class="c-row c-head"><span class="c-k">门店</span>`+
+      list.map(d=>`<span class="c-v">${d.name}</span>`).join("")+`</div>`+
+    row("评分（分）",        d=>d.score,          v=>v.toFixed(1),                     "max")+
+    row("评论量（条）",      d=>d.comments,       v=>v.toLocaleString("en-US"),        "max")+
+    row("人均消费（元）",    d=>d.spend,          v=>v+" 元",                          "min")+
+    row("热门指数",          d=>d.hot,            v=>v.toFixed(2),                     "max")+
+    row("性价比指数",        d=>d.value,          v=>v.toFixed(2),                     "max")+
+    row("评论量分位",        d=>byCmt.findIndex(x=>x.name===d.name),
+        v=>`第 ${v+1} 名`,                                                           "")+
+    row("所属商圈",          d=>d.district,       v=>v,                                "")+
+    row("价值象限",          d=>d.quad,           v=>{const q=QUAD.find(x=>x.key===v); return `${v} ${q.name}`;}, "")+
+    `<div class="c-note">对比口径：${list.length} 家门店，金色 = 本轮最优，灰色 = 本轮最差（人均消费越低越好）。</div>`;
+}
+
+/* ==========================================================
+   7. 页脚情报
+   ========================================================== */
+function buildTicker(){
+  const topHot  = byHot[0], topCmt = byCmt[0];
+  const cheap   = [...DATA].sort((a,b)=>a.spend-b.spend)[0];
+  const pricey  = [...DATA].sort((a,b)=>b.spend-a.spend)[0];
+  const best    = [...DATA].sort((a,b)=>b.score-a.score||b.comments-a.comments)[0];
+  const highRate= DATA.filter(d=>d.score>=4.5).length;
+  const bestVal = byValue[0];
+  const items = [
+    `热门指数榜首：<b>${topHot.name}</b> —— 指数 <i>${topHot.hot}</i>，评分 ${topHot.score}，人均 ${topHot.spend} 元`,
+    `性价比第一：<b>${bestVal.name}</b> —— 指数 <i>${bestVal.value.toFixed(2)}</i>（评分 ${bestVal.score} ÷ 人均 ${bestVal.spend} 元）`,
+    `评论体量第一：<b>${topCmt.name}</b> —— 累计 <i>${topCmt.comments.toLocaleString("en-US")}</i> 条，占全量 <i>${(topCmt.comments/KPI.comments*100).toFixed(1)}%</i>`,
+    `评分最高：<b>${best.name}</b> —— <i>${best.score}</i> 分，评论 ${best.comments.toLocaleString("en-US")} 条`,
+    `物超所值象限共 <i>${DATA.filter(d=>d.quad==="A").length}</i> 家，高价低质象限 <i>${DATA.filter(d=>d.quad==="D").length}</i> 家`,
+    `人均最亲民：<b>${cheap.name}</b> —— <i>${cheap.spend}</i> 元／人`,
+    `人均最高：<b>${pricey.name}</b> —— <i>${pricey.spend}</i> 元／人，约为最低价的 <i>${(pricey.spend/cheap.spend).toFixed(1)}</i> 倍`,
+    `高评分门店（≥4.5 分）共 <i>${highRate}</i> 家，占比 <i>${(highRate/DATA.length*100).toFixed(0)}%</i>`,
+    `${byDistrict.length} 个商圈中，<b>合生汇</b> 门店最多（<i>${(byDistrict.find(d=>d.name==="合生汇")||{n:0}).n}</i> 家）`,
+    `全量累计评论 <i>${KPI.comments.toLocaleString("en-US")}</i> 条，TOP3 贡献 <i>${(TOP3CMT/KPI.comments*100).toFixed(1)}%</i>`,
+    `人均消费均值 <i>${KPI.avgSpend.toFixed(1)}</i> 元，主流价格带集中在 61–100 元区间`
+  ];
+  const one = items.map(t=>`<span>◆ ${t}</span>`).join("");
+  document.getElementById("ticker").innerHTML = one + one;
+  document.getElementById("upd").textContent =
+    new Date().toLocaleString("zh-CN",{hour12:false});
+}
+
+/* ==========================================================
+   8. 时钟 & 缩放
+   ========================================================== */
+function clock(){
+  const d = new Date(), p = n => String(n).padStart(2,"0");
+  document.getElementById("clock").textContent = `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  const wd = ["星期日","星期一","星期二","星期三","星期四","星期五","星期六"][d.getDay()];
+  document.getElementById("today").textContent =
+    `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}  ${wd}`;
+}
+function fit(){
+  const s = Math.min(innerWidth/1920, innerHeight/1080);
+  const st = document.getElementById("stage");
+  st.style.transform = `translate(${(innerWidth-1920*s)/2}px,${(innerHeight-1080*s)/2}px) scale(${s})`;
+}
+
+/* ==========================================================
+   9. 屏幕轮播
+   ========================================================== */
+const SCREENS = [
+  {name:"总览排行", ids:["c_pop","c_reviewsLog","c_rating","c_spend","c_cmtDist"]},
+  {name:"价值分析", ids:["c_scatter","c_value","c_quad"]},
+  {name:"明细对比", ids:["c_district"]}
+];
+let curScreen = 0, autoPlay = true;
+function showScreen(i){
+  curScreen = (i + SCREENS.length) % SCREENS.length;
+  document.querySelectorAll(".screen").forEach((el,k)=>el.classList.toggle("active", k===curScreen));
+  document.querySelectorAll("#dots i").forEach((el,k)=>el.classList.toggle("on", k===curScreen));
+  /* 屏幕从隐藏变可见时容器尺寸为 0，必须在下一帧重新量测 */
+  requestAnimationFrame(()=>{
+    SCREENS[curScreen].ids.forEach(id=>{ if(CH[id]) CH[id].resize(); });
+  });
+}
+function buildDots(){
+  const box = document.getElementById("dots");
+  box.innerHTML = SCREENS.map((s,i)=>
+    `<i class="${i===0?"on":""}" title="第 ${i+1} 屏 · ${s.name}"></i>`).join("");
+  box.querySelectorAll("i").forEach((el,i)=>{
+    el.addEventListener("click", ()=>{ autoPlay = false; syncAutoBtn(); showScreen(i); });
+  });
+}
+function syncAutoBtn(){
+  document.getElementById("btnAuto").textContent = autoPlay ? "⏸ 暂停轮播" : "▶ 继续轮播";
+}
+
+/* ==========================================================
+   10. 单店下钻面板
+   ========================================================== */
+function openDoor(name){
+  const d = DATA.find(x=>x.name===name); if(!d) return;
+  const q = QUAD.find(x=>x.key===d.quad);
+  const rankHot = byHot.findIndex(x=>x.name===d.name)+1;
+  const rankCmt = byCmt.findIndex(x=>x.name===d.name)+1;
+  const rankVal = byValue.findIndex(x=>x.name===d.name)+1;
+
+  document.getElementById("dName").textContent = shortName(d.name);
+  document.getElementById("dTags").innerHTML =
+    `<b>${d.district}</b><b>象限 ${d.quad} · ${q.name}</b><b>综合排名 第 ${rankHot} / ${DATA.length}</b>`;
+
+  document.getElementById("dMetrics").innerHTML =
+    `<div><b>${d.score.toFixed(1)}</b><i>评分 分</i></div>`+
+    `<div><b>${d.comments.toLocaleString("en-US")}</b><i>评论 条</i></div>`+
+    `<div><b>${d.spend}</b><i>人均 元</i></div>`+
+    `<div><b>${d.hot}</b><i>热门指数</i></div>`;
+
+  document.getElementById("dRank").innerHTML =
+    `性价比指数 <b>${d.value.toFixed(2)}</b>（全量第 <b>${rankVal}</b> / ${DATA.length}）　·　`+
+    `评论量第 <b>${rankCmt}</b> / ${DATA.length}　·　`+
+    `全量均值 评分 ${KPI.avgScore.toFixed(2)} ／ 人均 ${KPI.avgSpend.toFixed(1)} 元`;
+
+  const bar = (lab, val, avgVal, fmt, max) => {
+    const pv = Math.max(3, Math.min(100, val/max*100));
+    const pa = Math.max(3, Math.min(100, avgVal/max*100));
+    return `<div class="d-bar">
+      <div class="d-lab"><span>${lab}</span><span>本店 <b>${fmt(val)}</b> ／ 均值 ${fmt(avgVal)}</span></div>
+      <div class="d-track"><div class="d-fill" style="width:${pv}%"></div></div>
+      <div class="d-avg" style="width:${pa}%"></div>
+    </div>`;
+  };
+  document.getElementById("dBars").innerHTML =
+    bar("评分",     d.score,    KPI.avgScore,    v=>v.toFixed(2),  5) +
+    bar("评论量",   d.comments, KPI.comments/DATA.length, v=>Math.round(v).toLocaleString("en-US"), maxCmt) +
+    bar("人均消费", d.spend,    KPI.avgSpend,    v=>v.toFixed(1),  maxSpend) +
+    bar("性价比指数", d.value,  KPI.avgScore/KPI.avgSpend*100, v=>v.toFixed(2), byValue[0].value) +
+    `<div class="d-tip">黄色细线为该指标的<b>全量均值</b>位置。点击右侧区域外可关闭本面板。</div>`;
+
+  document.getElementById("door").classList.add("on");
+  markStore(d);
+}
+function closeDoor(){
+  document.getElementById("door").classList.remove("on");
+  markStore(null);
+}
+/* 在气泡图上标出当前门店（用 markPoint），其余图表不破坏原有配置 */
+function markStore(d){
+  const inst = CH["c_scatter"]; if(!inst) return;
+  if(!d){ inst.setOption({series:[{id:"bubble", markPoint:{data:[]}}]}); return; }
+  inst.setOption({series:[{
+    id:"bubble",
+    markPoint:{
+      silent:true, symbol:"circle", symbolSize:74,
+      itemStyle:{color:"rgba(217,119,6,0)", borderColor:"#d97706", borderWidth:2},
+      label:{show:true, color:"#fbbf24", fontSize:11, fontWeight:"bold",
+             formatter:shortName(d.name).slice(0,8), position:"inside"},
+      data:[{coord:[d.spend, d.score]}]
+    }
+  }]});
+}
+
+/* ==========================================================
+   11. 导入数据
+   ========================================================== */
+function parseImport(text){
+  const rows = [];
+  text.split(/\r?\n/).forEach(line=>{
+    line = line.trim();
+    if(!line) return;
+    const cells = line.split(/\t|,|，|;|；/).map(s=>s.trim().replace(/^"|"$/g,""));
+    if(cells.length < 5) return;
+    const name = cells[0];
+    const nums = cells.slice(1,5).map(v=>parseFloat(v));
+    if(!name || nums.some(v=>!isFinite(v))) return;
+    if(/店名|评分/.test(name)) return;                 // 表头
+    rows.push([name, nums[0], Math.round(nums[1]), nums[2], nums[3]]);
+  });
+  return rows;
+}
+function openImp(){
+  document.getElementById("imp").classList.add("on");
+  document.getElementById("impText").value = RAW.map(r=>r.join(",")).join("\n");
+  document.getElementById("impMsg").className = "msg";
+  document.getElementById("impMsg").textContent = "已载入当前数据，可直接编辑后应用";
+}
+function applyImp(){
+  const rows = parseImport(document.getElementById("impText").value);
+  const msg = document.getElementById("impMsg");
+  if(rows.length < 2){
+    msg.className = "msg bad";
+    msg.textContent = "解析失败：至少需要 2 行有效数据（每行 5 列）";
+    return;
+  }
+  try{
+    localStorage.setItem("bigscreen.raw", JSON.stringify(rows));
+    msg.className = "msg ok";
+    msg.textContent = `已保存 ${rows.length} 家门店，正在刷新…`;
+    setTimeout(()=>location.reload(), 550);
+  }catch(err){
+    msg.className = "msg bad";
+    msg.textContent = "浏览器拒绝了本地存储：" + err.message;
+  }
+}
+
+/* ==========================================================
+   12. 初始化
+   ========================================================== */
+const CH = {};                               // id -> echarts instance
+const REG = {
+  c_pop:        {opt:optPop,         title:"热门指数 TOP 10 排行"},
+  c_reviewsLog: {opt:optReviewsLog,  title:"评论量排行 · 长尾分布"},
+  c_cmtDist:    {opt:optCmtDist,     title:"评论量区间分布"},
+  c_rating:     {opt:optRating,      title:"评分分布"},
+  c_spend:      {opt:optSpend,       title:"人均消费区间分布"},
+  c_scatter:    {opt:optScatter,     title:"人均消费 × 评分 气泡图"},
+  c_value:      {opt:optValue,       title:"性价比指数 TOP 10"},
+  c_quad:       {opt:optQuad,        title:"价值四象限"},
+  c_district:   {opt:optDistrict,    title:"商圈聚合"}
+};
+/* 支持点击下钻的图表 → 对应的数据点取店名方式 */
+const DRILL = {
+  c_scatter:    p => p.data && p.data.name,
+  c_quad:       p => p.data && p.data.name,
+  c_reviewsLog: p => p.name,
+  c_value:      p => p.name,
+  c_pop:        p => { const i = byHot.findIndex(d=>shortName(d.name)===p.name); return i>=0 ? byHot[i].name : null; }
+};
+
+function boot(){
+  clock(); setInterval(clock,1000);
+  fit();   addEventListener("resize", fit);
+
+  /* 第 6 步：导入数据会覆盖本地存储，这里优先读取 */
+  try{
+    const saved = localStorage.getItem("bigscreen.raw");
+    if(saved){
+      const arr = JSON.parse(saved);
+      if(Array.isArray(arr) && arr.length >= 2){
+        RAW.length = 0; arr.forEach(r=>RAW.push(r));
+        document.querySelector("header .h-side.left span:last-child").textContent =
+          "数据源：浏览器本地数据（通过「导入数据」写入）";
+      }
+    }
+  }catch(e){ /* 忽略损坏的本地数据 */ }
+
+  buildDots();
+  buildTicker();
+  buildRank();
+  buildDistrictTable();
+  buildNotice();
+  buildAlert();
+  pickSample();          // 默认预选一组示例对比，避免面板空白
+  buildCmpList();
+  renderCmp();
+
+  /* KPI 用真实统计写入（数据改动后自动保持准确） */
+  const vals = document.querySelectorAll(".kpi .val");
+  const setKpi = (i, num, dec, unit) => {
+    const el = vals[i]; el.dataset.num = num; el.dataset.dec = dec;
+    el.innerHTML = (unit ? `<u>${unit}</u>` : "");
+  };
+  setKpi(0, KPI.count, 0, "家");
+  setKpi(1, KPI.avgScore.toFixed(2), 2, "分");
+  setKpi(2, KPI.comments, 0, "条");
+  setKpi(3, KPI.avgSpend.toFixed(1), 1, "元");
+  setKpi(4, KPI.maxHot, 1, "");
+  vals.forEach(countUp);
+
+  Object.keys(REG).forEach(id=>{
+    const dom = document.getElementById(id);
+    if(!dom) return;
+    const inst = echarts.init(dom, "bigscreen", {renderer:"canvas"});
+    inst.setOption(REG[id].opt(), true);
+    CH[id] = inst;
+    /* 点击数据点 → 单店画像 */
+    if(DRILL[id]) inst.on("click", p=>{ const n = DRILL[id](p); if(n) openDoor(n); });
+    /* 点击面板空白处 → 放大 */
+    dom.closest(".panel").addEventListener("click", e=>{
+      if(e.target.closest("#door")) return;
+      openOverlay(id);
+    });
+  });
+  showScreen(0);
+  addEventListener("resize", ()=>{ Object.values(CH).forEach(c=>c.resize()); });
+
+  /* 自动轮播 */
+  setInterval(()=>{ if(autoPlay) showScreen(curScreen+1); }, 13000);
+  syncAutoBtn();
+}
+
+/* ---------- 展开 ---------- */
+let ovInst = null;
+function openOverlay(id){
+  const reg = REG[id]; if(!reg) return;
+  document.getElementById("ovTitle").textContent = reg.title + "  ·  放大视图";
+  document.getElementById("overlay").classList.add("on");
+  if(ovInst){ ovInst.dispose(); ovInst = null; }
+  const dom = document.getElementById("ovChart");
+  ovInst = echarts.init(dom, "bigscreen", {renderer:"canvas"});
+  ovInst.setOption(reg.opt(), true);
+  requestAnimationFrame(()=>ovInst && ovInst.resize());
+  dom.onclick = e => e.stopPropagation();
+}
+function closeOverlay(){
+  document.getElementById("overlay").classList.remove("on");
+  if(ovInst){ ovInst.dispose(); ovInst = null; }
+}
+document.getElementById("overlay").addEventListener("click", closeOverlay);
+
+/* ---------- 交互绑定 ---------- */
+document.getElementById("dClose").addEventListener("click", closeDoor);
+document.getElementById("btnAuto").addEventListener("click", ()=>{
+  autoPlay = !autoPlay; syncAutoBtn();
+});
+document.getElementById("btnFull").addEventListener("click", ()=>{
+  if(document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen();
+});
+document.getElementById("btnImport").addEventListener("click", openImp);
+document.getElementById("impCancel").addEventListener("click", ()=>
+  document.getElementById("imp").classList.remove("on"));
+document.getElementById("impApply").addEventListener("click", applyImp);
+/* 示例对比：性价比最高 + 性价比最低 + 评论最多 */
+function pickSample(){
+  cmpSel = [ byValue[0].name,
+             byValue[byValue.length-1].name,
+             byCmt[0].name ];
+}
+document.getElementById("cmpSample").addEventListener("click", ()=>{
+  pickSample(); buildCmpList(); renderCmp();
+});
+document.getElementById("cmpClear").addEventListener("click", ()=>{
+  cmpSel = []; buildCmpList(); renderCmp();
+});
+document.getElementById("stage").addEventListener("click", e=>{
+  if(e.target.closest("#door") || e.target.closest("#overlay") || e.target.closest("#imp")) return;
+  closeDoor();
+});
+
+addEventListener("keydown", e=>{
+  if(e.key === "Escape"){
+    closeOverlay();
+    closeDoor();
+    document.getElementById("imp").classList.remove("on");
+    return;
+  }
+  const tag = (e.target.tagName || "").toLowerCase();
+  if(tag === "textarea" || tag === "input") return;
+  if(e.key === "ArrowRight"){ autoPlay = false; syncAutoBtn(); showScreen(curScreen+1); }
+  else if(e.key === "ArrowLeft"){ autoPlay = false; syncAutoBtn(); showScreen(curScreen-1); }
+  else if(e.key >= "1" && e.key <= "3"){ autoPlay = false; syncAutoBtn(); showScreen(+e.key-1); }
+  else if(e.key === " "){ e.preventDefault(); autoPlay = !autoPlay; syncAutoBtn(); }
+  else if(e.key === "f" || e.key === "F"){ document.getElementById("btnFull").click(); }
+});
+addEventListener("resize", ()=>{ if(ovInst) ovInst.resize(); });
+
+boot();
+
+</script>
+</body>
+</html>
